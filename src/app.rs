@@ -33,6 +33,7 @@ impl Default for TemplateApp {
 
 impl TemplateApp {
     /// Called once before the first frame.
+
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         // This is also where you can customize the look and feel of egui using
         // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
@@ -54,18 +55,39 @@ struct Songs {
 struct SongCardData{
     title: String,
     artist: String,
-    length: String
+    length: String,
+    cover_path: String,
+    texture: Option<egui::TextureHandle>,
 }
 
 impl Songs{
     fn new() -> Songs{
-        let iter = (0..2000).map(|a| SongCardData{
+        let iter = (0..50).map(|a| SongCardData{
             title: (a).to_string(),
             artist: (a+1).to_string(),
-            length: (a*2).to_string()
+            length: (a*2).to_string(),
+            cover_path: "assets/icon-256.png".to_owned(),
+            texture: None,
         });
         Songs{
             articles: Vec::from_iter(iter)
+        }
+    }
+}
+
+impl SongCardData { //i must be for real this section is written by ai. im Sorry. but im fuck at rust,,
+    fn load_texture_if_needed(&mut self, ctx: &egui::Context) {
+        if self.texture.is_none() {
+            if let Ok(image) = image::open(&self.cover_path) {
+                let image = image.to_rgba8();
+                let size = [image.width() as usize, image.height() as usize];
+                let texture = ctx.load_texture(
+                    self.cover_path.clone(), 
+                    egui::ColorImage::from_rgba_unmultiplied(size, &image),
+                    Default::default()
+                );
+                self.texture = Some(texture);
+            }
         }
     }
 }
@@ -100,10 +122,17 @@ impl eframe::App for TemplateApp {
             });
         });
 
+        egui::TopBottomPanel::bottom("status")
+        .resizable(true)
+        .min_height(100.0)
+        .max_height(500.0)
+        .show(ctx, |ui|{
+            ui.label("Status hereeee!!!");
+        });
+
         egui::SidePanel::left("playlists")
         .resizable(true)
-        .default_width(100.0)
-        .min_width(20.0)
+        .min_width(30.0)
         .show(ctx, |ui|{
             ScrollArea::vertical().show(ui, |ui|{
                 ui.set_min_width(ui.available_width());
@@ -111,37 +140,56 @@ impl eframe::App for TemplateApp {
             });
         });
 
-        egui::TopBottomPanel::bottom("status")
-        .resizable(true)
-        .min_height(30.0)
-        .max_height(500.0)
-        .show(ctx, |ui|{
-            ui.label("Status hereeee!!!");
-        });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
             ui.heading("miniQuartz");
             let available_width = ui.available_width();
-            let height = self.row_height.unwrap_or(30.0);
-            let total_rows = self.songs.articles.len();
+
             ScrollArea::vertical()
             .max_width(available_width)
-            .show_rows(ui,height,self.songs.articles.len(),|ui, row_range|{
+            .show(ui,|ui|{
+                let row_height = self.row_height.unwrap_or(30.0); // proper row height
+                let total_rows = self.songs.articles.len();
+
+                let clip_rect = ui.clip_rect();
+                let top = clip_rect.top();
+                let bottom= clip_rect.bottom();
+
+                let mut start = ((top - ui.min_rect().top()) / row_height).floor() as usize;
+                let mut end = ((bottom - ui.min_rect().top()) / row_height).ceil() as usize;
+
+                let buffer_size = 5;
+
+                start = start.saturating_sub(buffer_size);
+                end = (end + buffer_size).min(total_rows);
+
+                let above_px = start as f32 * row_height;
+                ui.add_space(above_px);
+
                 ui.label(available_width.to_string());
-                let buffer = 5;
-                let start = row_range.start.saturating_sub(buffer);
-                ui.label(start.to_string());
-                let end = (row_range.end + buffer).min(total_rows);
-                ui.label(end.to_string());
-                let buffered_range = start..end;
-                for i in buffered_range{ 
-                    let song = &self.songs.articles[i]; // Ampersand makes it read-only, since the for loop tries to own "articles"
+
+                for i in start..end{ 
+                    let song = &mut self.songs.articles[i]; // Ampersand makes it read-only, since the for loop tries to own "articles"
+                    song.load_texture_if_needed(ctx);
+
                     ui.set_min_width(available_width);
                     ui.group(|ui|{
                         ui.horizontal(|ui|{
-                            ui.label(egui::RichText::new(format!("Title: {}", song.title)).strong());
-                            ui.label(format!("Artist {}", song.artist));
+                            if let Some(tex) = &song.texture {
+                                ui.add(
+                                egui::Image::new(tex)
+                                    .max_width(30.0)
+                                    .corner_radius(10),
+                            );
+                            } else {
+                                ui.label("img not found");
+                            }
+
+                            ui.vertical(|ui|{
+                                ui.label(egui::RichText::new(format!("Title: {}", song.title)).strong());
+                                ui.label(format!("Artist {}", song.artist));
+                            });
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui|{
                                 ui.add_space(10.0);
                                 ui.label(format!("Length {}", song.length));
@@ -149,6 +197,8 @@ impl eframe::App for TemplateApp {
                         });
                     });  
                 }
+                let remaining_px = (total_rows - end) as f32 * row_height;
+                ui.add_space(remaining_px);
             });
             
 
