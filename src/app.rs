@@ -167,16 +167,14 @@ impl eframe::App for TemplateApp {
         //--◑﹏◐---◑﹏◐---◑﹏◐---◑﹏◐---◑﹏◐---◑﹏◐---◑﹏◐---◑﹏◐---◑﹏◐---◑﹏◐-//
         egui::CentralPanel::default().show(ctx, |ui| { // central panel has to be rendered after other panels
             ui.heading("Playlist Name Here");
-            let available_width = ui.available_width();
-            let col_time_width= 130.0; // defioned here bc its used in many places and itd be annoying to change them both every time
+            let available_width = ui.available_width(); // todo: if there becomes more things that only need to happen on window resize, should create a check for if window resized.
+            let col_time_width= 130.0; // defined here bc its used in many places and itd be annoying to change them both every time
             let col1_width = self.col1_width.unwrap_or(30.0);
             let col2_width = self.col2_width.unwrap_or(30.0);
-            ui.label(col1_width.to_string());
-            ui.label(col2_width.to_string());
-            let last_column_width = available_width-(20.0+col2_width+col_time_width); // proper row height: it feels wrong to be setting this every frame.
+            let last_column_width = available_width-(20.0+col2_width+col_time_width); // proper row height: it feels wrong to be setting this every frame. todo: optimize that
                 TableBuilder::new(ui)
                             .column(Column::exact(20.0))
-                            .column(Column::auto().resizable(true).at_least(50.0))
+                            .column(Column::auto().resizable(true).at_least(50.0)) //todo: remember this on program restart
                             .column(Column::exact(last_column_width))
                             .column(Column::exact(col_time_width))
                             .header(20.0, |mut header| {
@@ -239,8 +237,6 @@ impl eframe::App for TemplateApp {
                 let above_px = start as f32 * row_height;
                 ui.add_space(above_px); // makes scroll bar look big (1/2)
 
-                ui.label(available_width.to_string());
-
                 for i in start..end{ // Display tracks that should be displayed
                 // no longer render buffer stuff
                     let song = &mut self.songs.articles[i]; // Ampersand makes it read-only, since the for loop tries to own "articles"
@@ -252,6 +248,7 @@ impl eframe::App for TemplateApp {
                         TableBuilder::new(ui)
                             .column(Column::exact(col2_width+20.0)) // 20.0 comes from the first header (#) column's exact width. should be set to a variable! todo
                             .column(Column::exact(col1_width))
+                            .column(Column::exact(col_time_width))
                             .header(30.0, |mut header|{
                                 header.col(|ui|{
                                     ui.horizontal(|ui|{
@@ -275,18 +272,17 @@ impl eframe::App for TemplateApp {
                                         ui.label("nyaaaaaaaa");
                                     });
                                 });
+                                header.col(|ui|{ // todo: shouldn't be part of the table.
+                                    ui.vertical_centered(|ui|{
+                                        ui.label(format!("Length {}", song.length)); // this will need to convert whatever songs have (probably ms) into H:M:S format in the future
+                                    });
+                                });
                             });
-                            
-
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui|{ // song length
-                                ui.add_space(20.0);
-                                ui.label(format!("Length {}", song.length)); // this will need to convert whatever songs have (probably ms) into H:M:S format in the future
-                            }); 
                         //});
                     });
                     if self.row_height.is_none(){
                         self.row_height = Some(group.response.rect.height()); // todo: this is in the for loop and is probably fuck for performance \(￣︶￣*\))
-                    }
+                    } // this really only needs to be done on startup and zoom (zoom tbi)
                 }
 
                 
