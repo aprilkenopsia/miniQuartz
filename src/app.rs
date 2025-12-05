@@ -3,7 +3,8 @@ use egui::{Id, Modal, ScrollArea};
 use egui_extras::{Column, TableBuilder};
 use gstreamer::prelude::*; // $env:PKG_CONFIG_PATH="C:\Program Files\gstreamer\1.0\msvc_x86_64\lib\pkgconfig"
 use gstreamer::{Message, Pipeline};
-use std::path::Path;
+use std::path::{Path,PathBuf};
+use url::Url;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -37,6 +38,12 @@ pub struct TemplateApp {
 
     #[serde(skip)]
     last_update: std::time::Instant,
+
+    #[serde(skip)]
+    error_show: bool,
+
+    #[serde(skip)]
+    error_value: String,
 }
 
 impl Default for TemplateApp {
@@ -54,6 +61,9 @@ impl Default for TemplateApp {
             position_ms: 0,
             duration_ms: 0,
             last_update: std::time::Instant::now(),
+
+            error_show: false,
+            error_value: "No error message".to_owned(),
         }
     }
 }
@@ -125,6 +135,13 @@ impl TemplateApp {
 //   Main app logic  //
 //--(^人^)---(^人^)--//
 
+fn uri_to_path(uri: &str) -> Result<PathBuf, String>{
+    Url::parse(uri)
+        .map_err(|e| e.to_string())?
+        .to_file_path()
+        .map_err(|_| "Invalid URI".into())
+}
+
 //（︶^︶）（︶^︶）//
 //    UI STUFF    //
 
@@ -150,9 +167,8 @@ impl eframe::App for TemplateApp {
                     });
                     ui.add_space(16.0);
                 });
-                // NOTE: no File->Quit on web pages!
 
-                egui::widgets::global_theme_preference_buttons(ui);
+                egui::widgets::global_theme_preference_buttons(ui); // where ddid they go...
             });
         });
 
@@ -196,6 +212,30 @@ impl eframe::App for TemplateApp {
                                 self.last_update = std::time::Instant::now();
                             }
                     }
+
+                    if self.error_show{
+                        Modal::new(Id::new("IO Error")).show(ui.ctx(), |ui| {
+                            ui.set_width(200.0);
+                            ui.heading("Unable to open file");
+
+                           ui.add_space(32.0);
+
+                           egui::Sides::new().show(
+                                ui,
+                            |_ui| {},
+                            |ui| {
+                                   if ui.button("aw dang").clicked() {
+                                        self.error_show = false;
+                                   }
+
+                                    if ui.button("im sorry").clicked() {
+                                        self.error_show = false;
+                                   }
+                               },
+                           );
+                        });
+                    }
+
                     if ui.button("Start gstream").clicked(){ // This should be considered a debug button. Gstream should be handled more elegantly than this.
                         // gstream logic
                         gstreamer::init().unwrap();
@@ -207,7 +247,7 @@ impl eframe::App for TemplateApp {
                         // Set the URI of the audio file
                         // Use "file://" prefix and an absolute path
                         let uri = "file:///E:/Programs/miniQuartz/miniQuartz/assets/xXHANA VENOMXx - 920LONDON - 02 iFeelLikeYouWould.flac"; // fui: I think uri's are better? Other libraries required uri's to do dynamic file selection.
-                        let path = Path::new(uri);
+                        let path = uri_to_path(uri).unwrap();
                         pb.set_property("uri", uri);
 
                         // verify file
@@ -218,28 +258,11 @@ impl eframe::App for TemplateApp {
                             .expect("Unable to set the pipeline to the Playing state"); // TODO: remove all these expects and replace with proper error handling. they're probably bad!
                         self.playbin = Some(pb);
                         } else { //modal code from demo https://github.com/emilk/egui/blob/main/crates/egui_demo_lib/src/demo/modals.rs
-                            Modal::new(Id::new("IO Error")).show(ui.ctx(), |ui| {
-                                           ui.set_width(200.0);
-                                           ui.heading("Unable to open file");
-
-                                           ui.add_space(32.0);
-
-                                           egui::Sides::new().show(
-                                               ui,
-                                               |_ui| {},
-                                               |ui| {
-                                                   if ui.button("aw dang").clicked() {
-                                                       ui.close();
-                                                   }
-
-                                                   if ui.button("im sorry").clicked() {
-                                                       ui.close();
-                                                   }
-                                               },
-                                           );
-                                       });
                             ui.label(format!("help"));
-                                   }
+                            self.error_value = "path.exists() returned false".to_owned();
+                            self.error_show = true;
+                        }
+
                         if let Some(playbin) = &self.playbin{
                             if self.last_update.elapsed().as_millis() > 100 {
                                 // Set position
@@ -435,7 +458,7 @@ impl eframe::App for TemplateApp {
                                             });
                                         });
                                     });
-                                    header.col(|ui| {
+                                    header.col(|ui| { // todo: why doesnt this show up
                                         ui.add_space(30.0);
                                         ui.label("nyaaaaaaaa");
                                     });
